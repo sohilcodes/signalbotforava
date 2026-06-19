@@ -5,7 +5,7 @@
 
 Deploy on Render:
   - Build Command : pip install -r requirements.txt
-  - Start Command : python main.py
+  - Start Command : python ava.py
   - Env Variable  : BOT_TOKEN = <your token>
 """
 
@@ -267,7 +267,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 #  MAIN — Polling Mode (works on Render free tier)
 # ──────────────────────────────────────────────
 
-def main() -> None:
+async def main() -> None:
     logger.info("Starting Zenith Trader Bot (Polling Mode)...")
 
     app = Application.builder().token(BOT_TOKEN).build()
@@ -277,8 +277,19 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
     logger.info("Bot is live! Polling for updates...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    async with app:
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+
+        # Run forever until interrupted
+        await asyncio.Event().wait()
+
+        await app.updater.stop()
+        await app.stop()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
+  
