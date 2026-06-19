@@ -1,13 +1,19 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║        ZENITH TRADER BOT - Webhook Mode (Render)            ║
+║         ZENITH TRADER BOT - Polling Mode (Render)           ║
 ╚══════════════════════════════════════════════════════════════╝
+
+Deploy on Render:
+  - Build Command : pip install -r requirements.txt
+  - Start Command : python main.py
+  - Env Variable  : BOT_TOKEN = <your token>
 """
 
 import logging
 import random
 import asyncio
 import os
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -19,12 +25,10 @@ from telegram.ext import (
 )
 
 # ──────────────────────────────────────────────
-#  CONFIG — Render environment variables se aayega
+#  CONFIG
 # ──────────────────────────────────────────────
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")  # e.g. https://your-app.onrender.com
-PORT = int(os.environ.get("PORT", 8443))
 
 VALID_LICENSE_KEYS = [
     "ZENITH-1234-ABCD",
@@ -54,7 +58,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
-#  USER SESSIONS
+#  USER SESSIONS (in-memory)
 # ──────────────────────────────────────────────
 
 user_sessions: dict[int, dict] = {}
@@ -64,7 +68,7 @@ def get_session(user_id: int) -> dict:
         user_sessions[user_id] = {
             "licensed": False,
             "asset": ASSETS[0],
-            "timeframe": TIMEFRAMES[2],
+            "timeframe": TIMEFRAMES[2],  # default 1m
         }
     return user_sessions[user_id]
 
@@ -109,7 +113,7 @@ def locked_text() -> str:
         "━━━━━━━━━━━━━━━━━━━━━\n"
         "🔒 *Device Status:* LOCKED\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Please enter your *License Key* to unlock access.\n\n"
+        "Please enter your *License Key* to unlock access\\.\n\n"
         "📩 Buy key → Contact Admin"
     )
 
@@ -134,10 +138,10 @@ def signal_result_text(session: dict) -> str:
         f"⏱ *Expiry:*     `{session['timeframe']}`\n\n"
         "──────────────────────────\n"
         f"📈 *Direction:*\n"
-        f"   {emoji} *{direction} ({label})*\n\n"
+        f"   {emoji} *{direction} \\({label}\\)*\n\n"
         f"🧠 *AI Confidence:* `{confidence}%`\n"
         "──────────────────────────\n\n"
-        "⚠️ _Trade responsibly. Past signals don't guarantee future results._"
+        "⚠️ _Trade responsibly\\. Past signals don't guarantee future results\\._"
     )
 
 # ──────────────────────────────────────────────
@@ -147,76 +151,124 @@ def signal_result_text(session: dict) -> str:
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     session = get_session(user_id)
-    logger.info(f"User {user_id} sent /start | licensed={session['licensed']}")
+    logger.info(f"User {user_id} /start | licensed={session['licensed']}")
+
     if session["licensed"]:
         await update.message.reply_text(
             main_menu_text(session),
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_markup=main_menu_keyboard(),
         )
     else:
-        await update.message.reply_text(locked_text(), parse_mode="Markdown")
+        await update.message.reply_text(locked_text(), parse_mode="MarkdownV2")
+
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     session = get_session(user_id)
     text = update.message.text.strip()
+
     if session["licensed"]:
-        return
+        return  # ignore random messages after unlock
+
     logger.info(f"User {user_id} entered key: {text}")
+
     if text in VALID_LICENSE_KEYS:
         session["licensed"] = True
-        await update.message.reply_text("✅ *ACCESS GRANTED!*\n\nWelcome to Zenith Trader Bot 🎉", parse_mode="Markdown")
+        await update.message.reply_text(
+            "✅ *ACCESS GRANTED\\!*\n\nWelcome to Zenith Trader Bot 🎉",
+            parse_mode="MarkdownV2",
+        )
         await asyncio.sleep(0.5)
         await update.message.reply_text(
             main_menu_text(session),
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_markup=main_menu_keyboard(),
         )
     else:
         await update.message.reply_text(
-            "❌ *Invalid License Key!*\nContact Admin to get a valid key.",
-            parse_mode="Markdown",
+            "❌ *Invalid License Key\\!*\nContact Admin to get a valid key\\.",
+            parse_mode="MarkdownV2",
         )
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+
     user_id = query.from_user.id
     session = get_session(user_id)
     data = query.data
     logger.info(f"User {user_id} pressed: {data}")
 
     if data in ("back_main", "menu_main"):
-        await query.edit_message_text(main_menu_text(session), parse_mode="Markdown", reply_markup=main_menu_keyboard())
+        await query.edit_message_text(
+            main_menu_text(session),
+            parse_mode="MarkdownV2",
+            reply_markup=main_menu_keyboard(),
+        )
 
     elif data == "menu_asset":
-        await query.edit_message_text("📊 *Select Trading Asset*\n\nChoose the pair:", parse_mode="Markdown", reply_markup=asset_keyboard())
+        await query.edit_message_text(
+            "📊 *Select Trading Asset*\n\nChoose the pair you want to trade:",
+            parse_mode="MarkdownV2",
+            reply_markup=asset_keyboard(),
+        )
 
     elif data.startswith("asset_"):
         session["asset"] = data.replace("asset_", "")
-        await query.edit_message_text(f"✅ Asset set!\n\n" + main_menu_text(session), parse_mode="Markdown", reply_markup=main_menu_keyboard())
+        await query.edit_message_text(
+            f"✅ Asset updated\\!\n\n" + main_menu_text(session),
+            parse_mode="MarkdownV2",
+            reply_markup=main_menu_keyboard(),
+        )
 
     elif data == "menu_timeframe":
-        await query.edit_message_text("⏱ *Select Expiry Timeframe*", parse_mode="Markdown", reply_markup=timeframe_keyboard())
+        await query.edit_message_text(
+            "⏱ *Select Expiry Timeframe*\n\nChoose how long each trade lasts:",
+            parse_mode="MarkdownV2",
+            reply_markup=timeframe_keyboard(),
+        )
 
     elif data.startswith("tf_"):
         session["timeframe"] = data.replace("tf_", "")
-        await query.edit_message_text(f"✅ Timeframe set!\n\n" + main_menu_text(session), parse_mode="Markdown", reply_markup=main_menu_keyboard())
+        await query.edit_message_text(
+            f"✅ Timeframe updated\\!\n\n" + main_menu_text(session),
+            parse_mode="MarkdownV2",
+            reply_markup=main_menu_keyboard(),
+        )
 
     elif data == "generate_signal":
-        await query.edit_message_text("⚡ *Analyzing Live Market Feed...*\n\n`█████░░░░░░░░░░ 33%`", parse_mode="Markdown")
+        # Step 1
+        await query.edit_message_text(
+            "⚡ *Analyzing Live Market Feed\\.\\.\\.*\n\n`█████░░░░░░░░░░ 33%`",
+            parse_mode="MarkdownV2",
+        )
         await asyncio.sleep(1.2)
-        await query.edit_message_text("🤖 *Applying AI Predictive Neural Algorithms...*\n\n`████████████░░░ 80%`", parse_mode="Markdown")
+
+        # Step 2
+        await query.edit_message_text(
+            "🤖 *Applying AI Predictive Neural Algorithms\\.\\.\\.*\n\n`████████████░░░ 80%`",
+            parse_mode="MarkdownV2",
+        )
         await asyncio.sleep(1.2)
-        await query.edit_message_text(signal_result_text(session), parse_mode="Markdown", reply_markup=signal_result_keyboard())
+
+        # Final signal
+        await query.edit_message_text(
+            signal_result_text(session),
+            parse_mode="MarkdownV2",
+            reply_markup=signal_result_keyboard(),
+        )
+
+    else:
+        logger.warning(f"Unknown callback: {data}")
 
 # ──────────────────────────────────────────────
-#  MAIN — Webhook Mode for Render
+#  MAIN — Polling Mode (works on Render free tier)
 # ──────────────────────────────────────────────
 
 def main() -> None:
-    logger.info("Starting Zenith Trader Bot (Webhook Mode)...")
+    logger.info("Starting Zenith Trader Bot (Polling Mode)...")
 
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -224,13 +276,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    # Webhook mode — Render automatically provides PORT
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=f"{WEBHOOK_URL}/webhook",
-        url_path="/webhook",
-    )
+    logger.info("Bot is live! Polling for updates...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
