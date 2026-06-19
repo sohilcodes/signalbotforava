@@ -239,26 +239,56 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
     elif data == "generate_signal":
-        # Step 1
+        chat_id = query.message.chat_id
+
+        # Step 1 — suspense message
+        asset = session["asset"]
+        timeframe = session["timeframe"]
+
         await query.edit_message_text(
-            "⚡ *Analyzing Live Market Feed\\.\\.\\.*\n\n`█████░░░░░░░░░░ 33%`",
+            "🤖 *ZENITH AI\\+ TRADE BOT*\n\n"
+            f"📊 *ASSET* 🔸 `{asset}`\n"
+            f"⏱ *TIME* 🔸 `{timeframe}`\n\n"
+            "🚨 *The Next Message Will Send*\n"
+            "*Direction* 🌲 *UP or DOWN* 🔻",
             parse_mode="MarkdownV2",
         )
+        await asyncio.sleep(1.5)
+
+        # Pick direction
+        direction = random.choice(["CALL", "PUT"])
+        confidence = round(random.uniform(91.2, 98.9), 1)
+
+        # Step 2 — arrow animation message
+        arrows = "🟢\n🟢\n🟢" if direction == "CALL" else "🔴\n🔴\n🔴"
+        arrow_msg = await context.bot.send_message(chat_id=chat_id, text=arrows)
         await asyncio.sleep(1.2)
 
-        # Step 2
-        await query.edit_message_text(
-            "🤖 *Applying AI Predictive Neural Algorithms\\.\\.\\.*\n\n`████████████░░░ 80%`",
-            parse_mode="MarkdownV2",
+        # Step 3 — edit arrow msg to full signal result
+        emoji = "🟢" if direction == "CALL" else "🔴"
+        label = "UP ↑" if direction == "CALL" else "DOWN ↓"
+        asset_e = asset.replace("/", "\\/").replace("(", "\\(").replace(")", "\\)")
+
+        result_text = (
+            "╔══ 🤖 *ZENITH AI SIGNAL* ══╗\n\n"
+            f"📊 *Asset:*      `{asset_e}`\n"
+            f"⏱ *Expiry:*     `{timeframe}`\n\n"
+            "──────────────────────────\n"
+            f"📈 *Direction:*\n"
+            f"   {emoji} *{direction} \\({label}\\)*\n\n"
+            f"🧠 *AI Confidence:* `{confidence}%`\n"
+            "──────────────────────────\n\n"
+            "⚠️ _Trade responsibly\\. Past signals don't guarantee future results\\._"
         )
-        await asyncio.sleep(1.2)
 
-        # Final signal
-        await query.edit_message_text(
-            signal_result_text(session),
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=arrow_msg.message_id,
+            text=result_text,
             parse_mode="MarkdownV2",
             reply_markup=signal_result_keyboard(),
         )
+
 
     else:
         logger.warning(f"Unknown callback: {data}")
@@ -292,4 +322,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-  
